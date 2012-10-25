@@ -12,11 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys
-import os
-
-import swiftclient
-
+import sys, os
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -28,6 +24,7 @@ ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 
 sys.path.insert(0, ROOT)
 
+import swiftclient
 
 # -- General configuration ----------------------------------------------------
 
@@ -186,8 +183,8 @@ htmlhelp_basename = 'SwiftClientwebdoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual])
 latex_documents = [
-    ('index', 'SwiftClient.tex', u'SwiftClient Documentation',
-     u'OpenStack, LLC.', 'manual'),
+  ('index', 'SwiftClient.tex', u'SwiftClient Documentation',
+   u'OpenStack, LLC.', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

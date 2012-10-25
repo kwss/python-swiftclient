@@ -20,9 +20,11 @@ Cloud Files client library used internally
 import socket
 import os
 import logging
+import httplib
 
+from swiftclient.contrib.federated import federated
 from urllib import quote as _quote
-from urlparse import urlparse, urlunparse
+from urlparse import urlparse, urlunparse, urljoin
 
 try:
     from eventlet.green.httplib import HTTPException, HTTPSConnection
@@ -201,7 +203,7 @@ def json_request(method, url, **kwargs):
     return resp, body
 
 
-def get_auth_1_0(url, user, key, snet):
+def _get_auth_v1_0(url, user, key, snet):
     parsed, conn = http_connection(url)
     method = 'GET'
     conn.request(method, parsed.path, '',
@@ -229,40 +231,58 @@ def get_auth_1_0(url, user, key, snet):
                                resp.getheader('x-auth-token'))
 
 
-def get_keystoneclient_2_0(auth_url, user, key, os_options):
-    """
-    Authenticate against a auth 2.0 server.
-
-    We are using the keystoneclient library for our 2.0 authentication.
-    """
-    from keystoneclient.v2_0 import client as ksclient
-    from keystoneclient import exceptions
+def _get_auth_v2_0(url, user, tenant_name, key, snet):
+    body = {'auth':
+            {'passwordCredentials': {'password': key, 'username': user},
+             'tenantName': tenant_name}}
+    token_url = urljoin(url, "tokens")
+    resp, body = json_request("POST", token_url, body=body)
+    token_id = None
     try:
-        _ksclient = ksclient.Client(username=user,
-                                    password=key,
-                                    tenant_name=os_options.get('tenant_name'),
-                                    tenant_id=os_options.get('tenant_id'),
-                                    auth_url=auth_url)
-    except exceptions.Unauthorized:
-        raise ClientException('Unauthorised. Check username, password'
-                              ' and tenant name/id')
-    except exceptions.AuthorizationFailure, err:
-        raise ClientException('Authorization Failure. %s' % err)
-    service_type = os_options.get('service_type') or 'object-store'
-    endpoint_type = os_options.get('endpoint_type') or 'publicURL'
+        url = None
+        catalogs = body['access']['serviceCatalog']
+        for service in catalogs:
+            if service['type'] == 'object-store':
+                url = service['endpoints'][0]['publicURL']
+        token_id = body['access']['token']['id']
+        if not url:
+            raise ClientException("There is no object-store endpoint "
+                                  "on this auth server.")
+    except(KeyError, IndexError):
+        raise ClientException("Error while getting answers from auth server")
+
+    if snet:
+        parsed = list(urlparse(url))
+        # Second item in the list is the netloc
+        parsed[1] = 'snet-' + parsed[1]
+        url = urlunparse(parsed)
+
+    return url, token_id
+
+federated_token_id = None
+federated_endpoint = None
+def _get_auth_federated(url, realm, tenant_name):
+    global federated_endpoint, federated_token_id
+    if federated_endpoint is not None and federated_token_id is not None:
+        return federated_endpoint, federated_token_id
     try:
-        endpoint = _ksclient.service_catalog.url_for(
-            attr='region',
-            filter_value=os_options.get('region_name'),
-            service_type=service_type,
-            endpoint_type=endpoint_type)
-    except exceptions.EndpointNotFound:
-        raise ClientException('Endpoint for %s not found - '
-                              'have you specified a region?' % service_type)
-    return (endpoint, _ksclient.auth_token)
+        body = federated.federatedAuthentication(url, realm, tenant_name)
+        url = None
+        catalogs = body['access']['serviceCatalog']
+        for service in catalogs:
+            if service['type'] == 'object-store':
+                url = service['endpoints'][0]['publicURL']
+        token_id = body['access']['token']['id']
+        if not url:
+            raise ClientException("There is no object-store endpoint "
+                                  "on this auth server.")        
+    except ClientException as ce:
+        raise ClientException("Error while getting answers from auth server")
+    federated_token_id = token_id
+    federated_endpoint = url
+    return url, token_id
 
-
-def get_auth(auth_url, user, key, **kwargs):
+def get_auth(url, user, key, snet=False, tenant_name=None, auth_version="1.0", realm=None):
     """
     Get authentication/authorization credentials.
 
@@ -271,46 +291,30 @@ def get_auth(auth_url, user, key, **kwargs):
     of the host name for the returned storage URL. With Rackspace Cloud Files,
     use of this network path causes no bandwidth charges but requires the
     client to be running on Rackspace's ServiceNet network.
+
+    :param url: authentication/authorization URL
+    :param user: user to authenticate as
+    :param key: key or password for authorization
+    :param snet: use SERVICENET internal network (see above), default is False
+    :param auth_version: OpenStack auth version, default is 1.0
+    :param tenant_name: The tenant/account name, required when connecting
+                        to a auth 2.0 system.
+    :returns: tuple of (storage URL, auth token)
+    :raises: ClientException: HTTP GET request to auth URL failed
     """
-    auth_version = kwargs.get('auth_version', '1')
-    os_options = kwargs.get('os_options', {})
-
-    if auth_version in ['1.0', '1', 1]:
-        return get_auth_1_0(auth_url,
-                            user,
-                            key,
-                            kwargs.get('snet'))
-
-    if auth_version in ['2.0', '2', 2]:
-
-        # We are allowing to specify a token/storage-url to re-use
-        # without having to re-authenticate.
-        if (os_options.get('object_storage_url') and
-                os_options.get('auth_token')):
-            return(os_options.get('object_storage_url'),
-                   os_options.get('auth_token'))
-
-        # We are handling a special use case here when we were
-        # allowing specifying the account/tenant_name with the -U
-        # argument
-        if not kwargs.get('tenant_name') and ':' in user:
-            (os_options['tenant_name'],
-             user) = user.split(':')
-
-        # We are allowing to have an tenant_name argument in get_auth
-        # directly without having os_options
-        if kwargs.get('tenant_name'):
-            os_options['tenant_name'] = kwargs['tenant_name']
-
-        if (not 'tenant_name' in os_options):
+    if auth_version in ["1.0", "1"]:
+        return _get_auth_v1_0(url, user, key, snet)
+    elif auth_version in ["2.0", "2"]:
+        if not tenant_name and ':' in user:
+            (tenant_name, user) = user.split(':')
+        if not tenant_name:
             raise ClientException('No tenant specified')
-
-        (auth_url, token) = get_keystoneclient_2_0(auth_url, user,
-                                                   key, os_options)
-        return (auth_url, token)
-
-    raise ClientException('Unknown auth_version %s specified.'
-                          % auth_version)
+        return _get_auth_v2_0(url, user, tenant_name, key, snet)
+    elif auth_version in ["F", "federated"]:
+        return _get_auth_federated(url, realm, tenant_name)
+    else:
+        raise ClientException('Unknown auth_version %s specified.'
+                              % auth_version)
 
 
 def get_account(url, token, marker=None, limit=None, prefix=None,
@@ -571,8 +575,6 @@ def put_container(url, token, container, headers=None, http_conn=None):
     if not headers:
         headers = {}
     headers['X-Auth-Token'] = token
-    if not 'content-length' in (k.lower() for k in headers):
-        headers['Content-Length'] = 0
     conn.request(method, path, '', headers)
     resp = conn.getresponse()
     body = resp.read()
@@ -605,8 +607,6 @@ def post_container(url, token, container, headers, http_conn=None):
     path = '%s/%s' % (parsed.path, quote(container))
     method = 'POST'
     headers['X-Auth-Token'] = token
-    if not 'content-length' in (k.lower() for k in headers):
-        headers['Content-Length'] = 0
     conn.request(method, path, '', headers)
     resp = conn.getresponse()
     body = resp.read()
@@ -923,7 +923,9 @@ class Connection(object):
 
     def __init__(self, authurl, user, key, retries=5, preauthurl=None,
                  preauthtoken=None, snet=False, starting_backoff=1,
-                 tenant_name=None, os_options=None, auth_version="1"):
+                 tenant_name=None,
+                 auth_version="1",
+                 realm=None):
         """
         :param authurl: authentication URL
         :param user: user name to authenticate as
@@ -936,9 +938,6 @@ class Connection(object):
         :param auth_version: OpenStack auth version, default is 1.0
         :param tenant_name: The tenant/account name, required when connecting
                             to a auth 2.0 system.
-        :param os_options: The OpenStack options which can have tenant_id,
-                           auth_token, service_type, endpoint_type,
-                           tenant_name, object_storage_url, region_name
         """
         self.authurl = authurl
         self.user = user
@@ -951,17 +950,15 @@ class Connection(object):
         self.snet = snet
         self.starting_backoff = starting_backoff
         self.auth_version = auth_version
-        self.os_options = os_options or {}
-        if tenant_name:
-            self.os_options['tenant_name'] = tenant_name
+        self.tenant_name = tenant_name
+        self.realm = realm
 
     def get_auth(self):
-        return get_auth(self.authurl,
-                        self.user,
-                        self.key,
-                        snet=self.snet,
+        return get_auth(self.authurl, self.user,
+                        self.key, snet=self.snet,
+                        tenant_name=self.tenant_name,
                         auth_version=self.auth_version,
-                        os_options=self.os_options)
+                        realm=self.realm)
 
     def http_connection(self):
         return http_connection(self.url)

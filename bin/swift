@@ -18,14 +18,13 @@ import socket
 
 from errno import EEXIST, ENOENT
 from hashlib import md5
-from optparse import OptionParser, SUPPRESS_HELP
+from optparse import OptionParser
 from os import environ, listdir, makedirs, utime, _exit as os_exit
 from os.path import basename, dirname, getmtime, getsize, isdir, join
 from Queue import Empty, Queue
-from random import shuffle
 from sys import argv, exc_info, exit, stderr, stdout
 from threading import current_thread, enumerate as threading_enumerate, Thread
-from time import sleep, time
+from time import sleep
 from traceback import format_exception
 from urllib import quote, unquote
 
@@ -39,9 +38,10 @@ def get_conn(options):
     return Connection(options.auth,
                       options.user,
                       options.key,
+                      snet=options.snet,
+                      tenant_name=options.os_tenant_name,
                       auth_version=options.auth_version,
-                      os_options=options.os_options,
-                      snet=options.snet)
+                      realm=options.realm)
 
 
 def mkdirs(path):
@@ -216,20 +216,16 @@ def st_delete(parser, args, print_queue, error_queue):
     def _delete_container(container, conn):
         try:
             marker = ''
-            had_objects = False
             while True:
                 objects = [o['name'] for o in
                            conn.get_container(container, marker=marker)[1]]
                 if not objects:
                     break
-                had_objects = True
                 for obj in objects:
                     object_queue.put((container, obj))
                 marker = objects[-1]
-            if had_objects:
-                # By using join() instead of empty() we should avoid most
-                # occurrences of 409 below.
-                object_queue.join()
+            while not object_queue.empty():
+                sleep(0.01)
             attempts = 1
             while True:
                 try:
@@ -329,9 +325,6 @@ def st_download(parser, args, print_queue, error_queue):
     parser.add_option('', '--container-threads', type=int,
                       default=10, help='Number of threads to use for '
                       'listing containers')
-    parser.add_option('', '--no-download', action='store_true',
-                      default=False, help="Perform download(s), but don't "
-                      "actually write anything to disk")
     (options, args) = parse_args(parser, args)
     args = args[1:]
     if options.out_file == '-':
@@ -354,10 +347,8 @@ def st_download(parser, args, print_queue, error_queue):
         else:
             raise Exception("Invalid queue_arg length of %s" % len(queue_arg))
         try:
-            start_time = time()
             headers, body = \
                 conn.get_object(container, obj, resp_chunk_size=65536)
-            header_receipt = time()
             content_type = headers.get('content-type')
             if 'content-length' in headers:
                 content_length = int(headers.get('content-length'))
@@ -368,7 +359,7 @@ def st_download(parser, args, print_queue, error_queue):
             if path[:1] in ('/', '\\'):
                 path = path[1:]
             md5sum = None
-            make_dir = not options.no_download and out_file != "-"
+            make_dir = out_file != "-"
             if content_type.split(';', 1)[0] == 'text/directory':
                 if make_dir and not isdir(path):
                     mkdirs(path)
@@ -383,45 +374,36 @@ def st_download(parser, args, print_queue, error_queue):
                 dirpath = dirname(path)
                 if make_dir and dirpath and not isdir(dirpath):
                     mkdirs(dirpath)
-                if not options.no_download:
-                    if out_file == "-":
-                        fp = stdout
-                    elif out_file:
-                        fp = open(out_file, 'wb')
-                    else:
-                        fp = open(path, 'wb')
+                if out_file == "-":
+                    fp = stdout
+                elif out_file:
+                    fp = open(out_file, 'wb')
+                else:
+                    fp = open(path, 'wb')
                 read_length = 0
                 if 'x-object-manifest' not in headers:
                     md5sum = md5()
                 for chunk in body:
-                    if not options.no_download:
-                        fp.write(chunk)
+                    fp.write(chunk)
                     read_length += len(chunk)
                     if md5sum:
                         md5sum.update(chunk)
-                if not options.no_download:
-                    fp.close()
+                fp.close()
             if md5sum and md5sum.hexdigest() != etag:
                 error_queue.put('%s: md5sum != etag, %s != %s' %
                                 (path, md5sum.hexdigest(), etag))
             if content_length is not None and read_length != content_length:
                 error_queue.put('%s: read_length != content_length, %d != %d' %
                                 (path, read_length, content_length))
-            if 'x-object-meta-mtime' in headers and not options.out_file \
-                    and not options.no_download:
-
+            if 'x-object-meta-mtime' in headers and not options.out_file:
                 mtime = float(headers['x-object-meta-mtime'])
                 utime(path, (mtime, mtime))
             if options.verbose:
-                finish_time = time()
-                time_str = 'headers %.3fs, total %.3fs, %.3fs MB/s' % (
-                    header_receipt - start_time, finish_time - start_time,
-                    float(read_length) / (finish_time - start_time) / 1000000)
                 if conn.attempts > 1:
-                    print_queue.put('%s [%s after %d attempts]' %
-                                    (path, time_str, conn.attempts))
+                    print_queue.put('%s [after %d attempts' %
+                                    (path, conn.attempts))
                 else:
-                    print_queue.put('%s [%s]' % (path, time_str))
+                    print_queue.put(path)
         except ClientException, err:
             if err.http_status != 404:
                 raise
@@ -438,10 +420,9 @@ def st_download(parser, args, print_queue, error_queue):
                            conn.get_container(container, marker=marker)[1]]
                 if not objects:
                     break
-                marker = objects[-1]
-                shuffle(objects)
                 for obj in objects:
                     object_queue.put((container, obj))
+                marker = objects[-1]
         except ClientException, err:
             if err.http_status != 404:
                 raise
@@ -466,10 +447,9 @@ def st_download(parser, args, print_queue, error_queue):
                               for c in conn.get_account(marker=marker)[1]]
                 if not containers:
                     break
-                marker = containers[-1]
-                shuffle(containers)
                 for container in containers:
                     container_queue.put(container)
+                marker = containers[-1]
         except ClientException, err:
             if err.http_status != 404:
                 raise
@@ -995,7 +975,7 @@ def split_headers(options, prefix='', error_queue=None):
         else:
             error_string = "Metadata parameter %s must contain a ':'.\n%s" \
                            % (item, st_post_help)
-            if error_queue:
+            if error_queue != None:
                 error_queue.put(error_string)
             else:
                 exit(error_string)
@@ -1006,10 +986,23 @@ def parse_args(parser, args, enforce_requires=True):
     if not args:
         args = ['-h']
     (options, args) = parser.parse_args(args)
-
-    if (not (options.auth and options.user and options.key)):
+    if options.auth_version in ['F', 'federated']:
+	options.federated = True
+    if options.federated:
+	if not options.auth:
+		options.auth = options.os_auth_url
+	options.auth_version = 'F'
+    if (not (options.auth and options.user and options.key) or
+        options.os_auth_url) and options.auth_version not in ['F', 'federated']:
         # Use 2.0 auth if none of the old args are present
         options.auth_version = '2.0'
+
+    if options.auth_version in ('2.0', '2') and not \
+            options.os_tenant_name and options.user and \
+            ':' in options.user:
+        (options.os_tenant_name,
+         options.os_username) = options.user.split(':')
+        options.user = options.os_username
 
     # Use new-style args if old ones not present
     if not options.auth and options.os_auth_url:
@@ -1019,20 +1012,13 @@ def parse_args(parser, args, enforce_requires=True):
     if not options.key and options.os_password:
         options.key = options.os_password
 
-    # Specific OpenStack options
-    options.os_options = {
-        'tenant_id': options.os_tenant_id,
-        'tenant_name': options.os_tenant_name,
-        'service_type': options.os_service_type,
-        'endpoint_type': options.os_endpoint_type,
-        'auth_token': options.os_auth_token,
-        'object_storage_url': options.os_storage_url,
-        'region_name': options.os_region_name,
-    }
-
     # Handle trailing '/' in URL
     if options.auth and not options.auth.endswith('/'):
         options.auth += '/'
+
+    if options.federated and enforce_requires:
+        if options.auth:
+            enforce_requires = False
 
     if enforce_requires and \
             not (options.auth and options.user and options.key):
@@ -1041,8 +1027,11 @@ Auth version 1.0 requires ST_AUTH, ST_USER, and ST_KEY environment variables
 to be set or overridden with -A, -U, or -K.
 
 Auth version 2.0 requires OS_AUTH_URL, OS_USERNAME, OS_PASSWORD, and
-OS_TENANT_NAME OS_TENANT_ID to be set or overridden with --os-auth-url,
---os-username, --os-password, --os-tenant-name or os-tenant-id.'''.strip('\n'))
+OS_TENANT_NAME to be set or overridden with --os_auth_url, --os_username,
+--os_password, or --os_tenant_name.
+
+Federated auth requires OS_AUTH_URL to be set or overidden with --os_auth_url.
+'''.strip('\n'))
     return options, args
 
 
@@ -1074,81 +1063,38 @@ Example:
                       dest='auth_version',
                       default=environ.get('ST_AUTH_VERSION', '1.0'),
                       type=str,
-                      help='Specify a version for authentication'
-                           '(default: 1.0)')
+                      help='Specify a version for authentication'\
+                          '(default: 1.0)')
     parser.add_option('-U', '--user', dest='user',
                       default=environ.get('ST_USER'),
                       help='User name for obtaining an auth token')
     parser.add_option('-K', '--key', dest='key',
                       default=environ.get('ST_KEY'),
                       help='Key for obtaining an auth token')
-    parser.add_option('--os-username',
-                      metavar='<auth-user-name>',
-                      default=environ.get('OS_USERNAME'),
-                      help='Openstack username. Defaults to env[OS_USERNAME].')
-    parser.add_option('--os_username',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-password',
-                      metavar='<auth-password>',
-                      default=environ.get('OS_PASSWORD'),
-                      help='Openstack password. Defaults to env[OS_PASSWORD].')
-    parser.add_option('--os_password',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-tenant-id',
-                      metavar='<auth-tenant-id>',
-                      default=environ.get('OS_TENANT_ID'),
-                      help='OpenStack tenant ID.'
-                           'Defaults to env[OS_TENANT_ID]')
-    parser.add_option('--os_tenant_id',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-tenant-name',
-                      metavar='<auth-tenant-name>',
-                      default=environ.get('OS_TENANT_NAME'),
-                      help='Openstack tenant name.'
-                           'Defaults to env[OS_TENANT_NAME].')
-    parser.add_option('--os_tenant_name',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-auth-url',
-                      metavar='<auth-url>',
+    parser.add_option('-F', '--federated', dest='federated',action="store_true",
+                      default=environ.get('ST_REALM'),
+                      help='Enable the federated authentication.')
+    parser.add_option('-R', '--realm', dest='realm',
+                      default=environ.get('ST_REALM'),
+                      help='Realm to use for the federated authentication')
+    parser.add_option('--os_auth_url', dest='os_auth_url',
                       default=environ.get('OS_AUTH_URL'),
                       help='Openstack auth URL. Defaults to env[OS_AUTH_URL].')
-    parser.add_option('--os_auth_url',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-auth-token',
-                      metavar='<auth-token>',
-                      default=environ.get('OS_AUTH_TOKEN'),
-                      help='Openstack token. Defaults to env[OS_AUTH_TOKEN]')
-    parser.add_option('--os_auth_token',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-storage-url',
-                      metavar='<storage-url>',
-                      default=environ.get('OS_STORAGE_URL'),
-                      help='Openstack storage URL.'
-                           'Defaults to env[OS_STORAGE_URL]')
-    parser.add_option('--os_storage_url',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-region-name',
-                      metavar='<region-name>',
-                      default=environ.get('OS_REGION_NAME'),
-                      help='Openstack region name. '
-                           'Defaults to env[OS_REGION_NAME]')
-    parser.add_option('--os_region_name',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-service-type',
-                      metavar='<service-type>',
-                      default=environ.get('OS_SERVICE_TYPE'),
-                      help='Openstack Service type.'
-                           'Defaults to env[OS_SERVICE_TYPE]')
-    parser.add_option('--os_service_type',
-                      help=SUPPRESS_HELP)
-    parser.add_option('--os-endpoint-type',
-                      metavar='<endpoint-type>',
-                      default=environ.get('OS_ENDPOINT_TYPE'),
-                      help='Openstack Endpoint type. (publicURL, e.g.)' \
-                           'Defaults to env[OS_ENDPOINT_TYPE]')
+    parser.add_option('--os_username', dest='os_username',
+                      default=environ.get('OS_USERNAME'),
+                      help='Openstack username. Defaults to env[OS_USERNAME].')
+    parser.add_option('-T', '--os_tenant_name', dest='os_tenant_name',
+                      default=environ.get('OS_TENANT_NAME'),
+                      help='Openstack tenant name.' \
+                           'Defaults to env[OS_TENANT_NAME].')
+    parser.add_option('--os_password', dest='os_password',
+                      default=environ.get('OS_PASSWORD'),
+                      help='Openstack password. Defaults to env[OS_PASSWORD].')
     parser.disable_interspersed_args()
     (options, args) = parse_args(parser, argv[1:], enforce_requires=False)
     parser.enable_interspersed_args()
+    if options.federated:
+        options.auth_version = "federated"
 
     commands = ('delete', 'download', 'list', 'post', 'stat', 'upload')
     if not args or args[0] not in commands:

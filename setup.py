@@ -32,6 +32,7 @@ def read(fname):
 
 setuptools.setup(
     name=name,
+    zip_safe = False,
     version=setup.get_post_version('swiftclient'),
     description='Client Library for OpenStack Object Storage API',
     long_description=read('README.rst'),
@@ -40,13 +41,14 @@ setuptools.setup(
     author='OpenStack, LLC.',
     author_email='openstack-admins@lists.launchpad.net',
     packages=setuptools.find_packages(exclude=['tests', 'tests.*']),
+    data_files=[('swiftclient/contrib/federated/config',['federated.cfg']), ('swiftclient/contrib/federated/certs',['certs/server.key', 'certs/server.crt'])],
     cmdclass=setup.get_cmdclass(),
     install_requires=requires,
     dependency_links=depend_links,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
-        'Environment :: OpenStack',
+	'Environment :: OpenStack',
         'Intended Audience :: Developers',
         'Intended Audience :: Information Technology',
         'License :: OSI Approved :: Apache Software License',
