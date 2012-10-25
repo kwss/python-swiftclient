@@ -37,7 +37,7 @@ def getRealmList(keystoneEndpoint):
 # @param keystoneEndpoint The keystone url
 # @param realm The name of the IdP
 def getIdPRequest(keystoneEndpoint, realm):
-    data = {'realm': realm}
+    data = {'realm': {'name': realm}}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
     info = json.loads(resp.read())
     return info
