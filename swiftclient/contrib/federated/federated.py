@@ -14,6 +14,7 @@ import federated_utils as futils
 # @param tenantFn The tenant friendly name the user wants to use
 def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
     realms = getRealmList(keystoneEndpoint)
+    print realms
     if realm is None or {'name': realm} not in realms['realms']:
         realm = futils.selectRealm(realms['realms'])
     request = getIdPRequest(keystoneEndpoint, realm)
@@ -37,7 +38,8 @@ def getRealmList(keystoneEndpoint):
 # @param keystoneEndpoint The keystone url
 # @param realm The name of the IdP
 def getIdPRequest(keystoneEndpoint, realm):
-    data = {'realm': {'name': realm}}
+    print realm
+    data = {'realm': realm}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
     info = json.loads(resp.read())
     return info
