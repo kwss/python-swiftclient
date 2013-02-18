@@ -1,3 +1,4 @@
+import imp
 import os
 import json
 import BaseHTTPServer
@@ -17,13 +18,21 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
     if realm is None or {'name': realm} not in realms['realms']:
         realm = futils.selectRealm(realms['realms'])
     request = getIdPRequest(keystoneEndpoint, realm)
-    response = getIdPResponse(request['idpEndpoint'], request['idpRequest'])
+    # Load the correct protocol module according to the IdP type
+    protocol = realm['type'].split('.')[1]
+    processing_module = load_protocol_module(protocol)
+    response = processing_module.getIdPResponse(request['idpEndpoint'], request['idpRequest'])
     tenantData = getUnscopedToken(keystoneEndpoint, response, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
     if tenant is None:
         tenant = futils.selectTenant(tenantData['tenants'])['id']
     scopedToken = swapTokens(keystoneEndpoint, tenantData['unscopedToken'], tenant)
     return scopedToken
+
+def load_protocol_module(protocol):
+    ''' Dynamically load correct module for processing authentication
+        according to identity provider's protocol'''
+    return imp.load_source(protocol, os.path.dirname(__file__)+'/protocols/'+protocol+".py")
 
 ## Get the list of all the IdP available
 # @param keystoneEndpoint The keystone url

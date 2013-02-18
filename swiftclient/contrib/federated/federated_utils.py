@@ -26,7 +26,7 @@ def middlewareRequest(keystoneEndpoint, data = {}, method = "GET"):
 def selectTenant(tenantsList):
     print "You have access to the following tenant(s):"
     for idx, tenant in enumerate(tenantsList):
-        print "\t{", idx, "} ", tenant["friendlyName"]
+        print "\t{", idx, "} ", tenant["description"]
     chosen = False
     choice = None
     while not chosen:
@@ -61,5 +61,5 @@ def selectRealm(realmList):
 ## Given a tenants list and a friendly name, returns the corresponding tenantId
 def getTenantId(tenantsList, friendlyname):
     for idx, tenant in enumerate(tenantsList):
-        if tenant["friendlyName"] == friendlyname:
+        if tenant["name"] == friendlyname:
             return tenant["id"]

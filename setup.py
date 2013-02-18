@@ -41,7 +41,7 @@ setuptools.setup(
     author='OpenStack, LLC.',
     author_email='openstack-admins@lists.launchpad.net',
     packages=setuptools.find_packages(exclude=['tests', 'tests.*']),
-    data_files=[('swiftclient/contrib/federated/config',['federated.cfg']), ('swiftclient/contrib/federated/certs',['certs/server.key', 'certs/server.crt'])],
+    data_files=[('swiftclient/contrib/federated/protocols/config',['federated.cfg']), ('swiftclient/contrib/federated/protocols/certs',['certs/server.key', 'certs/server.crt'])],
     cmdclass=setup.get_cmdclass(),
     install_requires=requires,
     dependency_links=depend_links,
