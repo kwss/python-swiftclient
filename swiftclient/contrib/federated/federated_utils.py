@@ -44,17 +44,17 @@ def selectTenant(tenantsList):
 
 ## Displays the list of realm to the user
 def selectRealm(realmList):
-    print "You have access to the following realm(s):"
+    print "Please use one of the following services to authenticate you:"
     for idx, realm in enumerate(realmList):
         print "\t{", idx, "} ", realm["name"]
     choice = None
     while choice is None:
     	try:
-            choice = int(raw_input("Enter the number corresponding to the realm you want to use: "))
+            choice = int(raw_input("Enter the number corresponding to the service you want to use: "))
     	except:
             print "An error occurred with your selection"
     	if choice < 0 or choice >= len(realmList):
-            print "The selection made was not a valid choice of realm"
+            print "The selection made was not a valid choice of service"
 	    choice = None
     return realmList[choice]
 

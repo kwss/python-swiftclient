@@ -12,6 +12,8 @@ import ssl
 # @param idpEndpoint The IdP address
 # @param idpRequest The authentication request returned by Keystone
 def getIdPResponse(idpEndpoint, idpRequest):
+    print "\nInitiating Authentication against Keystone V2 Identity Provider\n"
+    print "Contacting Keystone Identity Provider\n"
     # Get the unscoped token
     # 1. Get the user name
     chosen = False
@@ -45,6 +47,7 @@ def getIdPResponse(idpEndpoint, idpRequest):
     # Get the scoped token
     newReq = {"auth":{"tenantName": tenant["name"], "token":{"id":unscoped["access"]["token"]["id"]}}}
     scoped = json.loads(request(idpEndpoint+'/tokens', method='POST', data=newReq).read())
+    print "\nSuccessfully Authorised.\n"
     # Return scoped token
     return scoped
 
