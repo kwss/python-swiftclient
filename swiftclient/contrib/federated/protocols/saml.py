@@ -7,7 +7,7 @@ import ssl
 ## Sends the authentication request to the IdP along
 # @param idpEndpoint The IdP address
 # @param idpRequest The authentication request returned by Keystone
-def getIdPResponse(idpEndpoint, idpRequest):
+def getIdPResponse(idpEndpoint, idpRequest, realm=None):
     global response
     response = None
     config = open(os.path.join(os.path.dirname(__file__),"config/federated.cfg"), "Ur")
@@ -29,6 +29,7 @@ def getIdPResponse(idpEndpoint, idpRequest):
         key = os.path.join(os.path.dirname(__file__),"certs/server.key")
     if cert == "default":
         cert = os.path.join(os.path.dirname(__file__),"certs/server.crt")
+    print "Initiating Authentication against: "+realm["name"]+"\n"
     webbrowser.open(idpEndpoint + idpRequest)
     class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
@@ -68,4 +69,5 @@ def getIdPResponse(idpEndpoint, idpRequest):
     if response is None:
         print ("There was no response from the Identity Provider or the request timed out")
         exit("An error occurred, please try again")
+    print "Authentication Complete\n"
     return response

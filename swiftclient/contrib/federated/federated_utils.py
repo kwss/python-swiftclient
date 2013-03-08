@@ -23,8 +23,11 @@ def middlewareRequest(keystoneEndpoint, data = {}, method = "GET"):
     return response
 
 ## Displays the list of tenants to the user so he can choose one
-def selectTenant(tenantsList):
-    print "You have access to the following tenant(s):"
+def selectTenant(tenantsList, serverName=None):
+    if not serverName:
+        print "You have access to the following tenant(s):"
+    else:
+        print "You have access to the following tenant(s) on "+serverName+":"
     for idx, tenant in enumerate(tenantsList):
         print "\t{", idx, "} ", tenant["description"]
     chosen = False
