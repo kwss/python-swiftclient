@@ -21,7 +21,7 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
     # Load the correct protocol module according to the IdP type
     protocol = realm['type'].split('.')[1]
     processing_module = load_protocol_module(protocol)
-    response = processing_module.getIdPResponse(request['idpEndpoint'], request['idpRequest'], realm)
+    response = processing_module.getIdPResponse(keystoneEndpoint, request['idpEndpoint'], request['idpRequest'], realm)
     tenantData = getUnscopedToken(keystoneEndpoint, response, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
     if tenant is None:
