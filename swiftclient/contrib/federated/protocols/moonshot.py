@@ -65,20 +65,18 @@ class MoonshotException(Exception):
     pass
 
 class MoonshotNegociation(object):
-    def __init__(self, keystoneEndpoint, serviceName, mechanism, idpRequest, realm):
+    def __init__(self, keystoneEndpoint, serviceName, mechanism, idpRequest, requestPool, realm):
         self.realm = realm
         self.context = None
         self.serviceName = serviceName
         self.mechanism = mechanism
         
-        self.requestPool = urllib3.PoolManager()
+        self.requestPool = requestPool
         self.keystoneEndpoint = keystoneEndpoint
         self.idpRequest = idpRequest
-        self.idpResponse = ""
+        self.idpResponse = {'negotiation': ''}
 
     def negociation(self):
-        LOG.debug("MoonshotNegociation/negociation()")
-        #try:
         result, self.context = moonshot.authGSSClientInit(self.serviceName,
                                                           moonshot.GSS_C_MUTUAL_FLAG | moonshot.GSS_C_SEQUENCE_FLAG,
                                                           self.mechanism)
@@ -87,34 +85,32 @@ class MoonshotNegociation(object):
         negociation = moonshot.AUTH_GSS_CONTINUE
         while negociation != moonshot.AUTH_GSS_COMPLETE:
             negociation = self.negociationStep()
-        print "END"
-        #except moonshot.KrbError, err:
-        #    LOG.error('Moonshot error: %s' % err[0][0])
-        #except MoonshotException, err:
-        #    LOG.error(err)
+        LOG.info("\nAuthentication successful using \"%s\" moonshot identity.\n", moonshot.authGSSClientUserName(self.context))
 
     def negociationStep(self):
-        LOG.debug("MoonshotNegociation/negociationStep()")
-        result = moonshot.authGSSClientStep(self.context, self.idpResponse)
-        #if result != 0:
-        #    raise MoonshotException('moonshot.authGSSServerStep returned result %d' % result)
+        result = moonshot.authGSSClientStep(self.context, self.idpResponse['negotiation'])
+
+        # Build request using GSS challenge
         idpRequest = copy.copy(self.idpRequest)
         idpRequest['negotiation'] = moonshot.authGSSClientResponse(self.context);
-        LOG.debug("request: %r", idpRequest)
-        self.idpResponse = self.negociationRequest(idpRequest)['negotiation']
-        LOG.debug("response: %r", self.idpResponse)
+
+        # Send request only if the challenge is not empty (end of negotiation)
+        if idpRequest['negotiation'] is not None:
+            self.idpResponse = self.negociationRequest(idpRequest)
+            LOG.debug("response: %r", json.dumps(self.idpResponse))
+        LOG.debug("authGSSClientStep: %d", result)
         return result
 
     def negociationRequest(self, body):
-        LOG.debug("MoonshotNegociation/negociationRequest()")
         headers = {'X-Authentication-Type': 'federated'}
         body = json.dumps({'realm': self.realm, 'idpResponse': body})
+        LOG.debug("request: %s", body)
         return json.loads(self.requestPool.urlopen('POST', self.keystoneEndpoint, body = body, headers = headers).data)
 
 ## Sends the authentication request to the IdP along
 # @param idpEndpoint {u'serviceName': u'keystone@moonshot', u'mechanism': u'{1 3 6 1 5 5 15 1 1 18}'}
 # @param idpRequest The authentication request returned by Keystone
-def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, realm=None):
-    print "\nMoonshot/getIdPResponse()\n"
-    m = MoonshotNegociation(keystoneEndpoint, idpEndpoint['serviceName'], idpEndpoint['mechanism'], idpRequest, realm)
+def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm=None):
+    m = MoonshotNegociation(keystoneEndpoint, idpEndpoint['serviceName'], idpEndpoint['mechanism'], idpRequest, requestPool, realm)
     m.negociation()
+    return None
