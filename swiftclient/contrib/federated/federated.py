@@ -13,7 +13,7 @@ import federated_utils as futils
 # @param keystoneEndpoint The keystone url
 # @param realm The IdP the user will be using
 # @param tenantFn The tenant friendly name the user wants to use
-def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
+def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 = False):
     realms = getRealmList(keystoneEndpoint)
     if realm is None or {'name': realm} not in realms['realms']:
         realm = futils.selectRealm(realms['realms'])
@@ -25,8 +25,18 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
     tenantData = getUnscopedToken(keystoneEndpoint, response, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
     if tenant is None:
-        tenant = futils.selectTenant(tenantData['tenants'])['id']
-    scopedToken = swapTokens(keystoneEndpoint, tenantData['unscopedToken'], tenant)
+        tenant = futils.selectTenantOrDomain(tenantData['tenants'])
+        if tenant.get("project", None) is None and tenant.get("domain", None) is None:
+            tenant = tenant["id"]
+            type = "tenantId"
+        else:
+            if tenant.get("domain", None) is None:
+                tenant = tenant["project"]["id"]
+                type = "tenantId"
+            else:
+                tenant = tenant["domain"]["id"]
+                type = "domainId"
+    scopedToken = swapTokens(keystoneEndpoint, tenantData['unscopedToken'], type, tenant)
     return scopedToken
 
 def load_protocol_module(protocol):
@@ -138,19 +148,24 @@ def getUnscopedToken(keystoneEndpoint, idpResponse, realm = None):
 # @param tenantFn The tenant friendly name
 def getScopedToken(keystoneEndpoint, idpResponse, tenantFn):
     response = getUnscopedToken(keystoneEndpoint, idpResponse)
-    tenantId = futils.getTenantId(response["tenants"])
+    type, tenantId = futils.getTenantId(response["tenants"])
     if tenantId is None:
         print "Error the tenant could not be found, should raise InvalidTenant"
-    scoped = swapTokens(keystoneEndpoint, response["unscopedToken"], tenantId)
+    scoped = swapTokens(keystoneEndpoint, response["unscopedToken"], type, tenantId)
     return scoped
 
 ## Get a scoped token from an unscoped one
 # @param keystoneEndpoint The keystone url
 # @param unscopedToken The unscoped authentication token obtained from getUnscopedToken()
 # @param tenanId The tenant Id the user wants to use
-def swapTokens(keystoneEndpoint, unscopedToken, tenantId):
-    data = {'auth' : {'token' : {'id' : unscopedToken}, 'tenantId' : tenantId}}
-    data = json.dumps(data)
-    req = urllib2.Request(keystoneEndpoint + "tokens", data, {'Content-Type' : 'application/json'})
-    resp = urllib2.urlopen(req)
+def swapTokens(keystoneEndpoint, unscopedToken, type, tenantId):
+    data = {'auth' : {'token' : {'id' : unscopedToken}, type : tenantId}}
+    if "v3" in keystoneEndpoint:
+       keystoneEndpoint+="auth/"
+       data = {"auth": {"identity": {"methods": ["token"],"token": {"id": unscopedToken}, "scope":{}}}}
+       if type == 'domainId':
+           data["auth"]["identity"]["scope"]["domain"] = {"id": tenantId}
+       else:
+           data["auth"]["identity"]["scope"]["project"] = {"id": tenantId}
+    resp = futils.middlewareRequest(keystoneEndpoint + "tokens", data,'POST', withheader = False)
     return json.loads(resp.read())

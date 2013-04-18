@@ -43,7 +43,7 @@ def getIdPResponse(idpEndpoint, idpRequest, realm=None):
     # Get the list of tenants
     tenants = json.loads(request(idpEndpoint+'/tenants', method='GET', header={'X-Auth-Token':unscoped['access']['token']['id']}).read())
     # Offer the user the choice of tenants
-    tenant = federated_utils.selectTenant(tenants['tenants'],serverName=realm["name"])
+    tenant = federated_utils.selectTenantOrDomain(tenants['tenants'],serverName=realm["name"])
     # Get the scoped token
     newReq = {"auth":{"tenantName": tenant["name"], "token":{"id":unscoped["access"]["token"]["id"]}}}
     scoped = json.loads(request(idpEndpoint+'/tokens', method='POST', data=newReq).read())
