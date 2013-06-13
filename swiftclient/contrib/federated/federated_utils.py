@@ -10,7 +10,7 @@ import urllib3
 ## Send a request that will be process by the Federation Middleware
 # It add the X-Auth-Type: federated header in the HTTP request
 def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None):
-    print 'Request: %r' % json.dumps(data)
+    #print 'Request: %r' % json.dumps(data)
     headers = {'X-Authentication-Type': 'federated'}
     if pool is None:
         pool = urllib3.PoolManager()
@@ -23,7 +23,7 @@ def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None):
         headers['Content-Type'] = 'application/json'
         response = pool.urlopen('POST', keystoneEndpoint, body = data, headers = headers)
 
-    print 'Response: %r' % response.data
+    #print 'Response: %r' % response.data
     return response
 
 ## Displays the list of tenants to the user so he can choose one
@@ -33,7 +33,7 @@ def selectTenant(tenantsList, serverName=None):
     else:
         print "You have access to the following tenant(s) on "+serverName+":"
     for idx, tenant in enumerate(tenantsList):
-        print "\t{", idx, "} ", tenant["description"]
+        print "\t{", idx, "} ", tenant["project"]["description"]
     chosen = False
     choice = None
     while not chosen:
@@ -68,5 +68,5 @@ def selectRealm(realmList):
 ## Given a tenants list and a friendly name, returns the corresponding tenantId
 def getTenantId(tenantsList, friendlyname):
     for idx, tenant in enumerate(tenantsList):
-        if tenant["name"] == friendlyname:
-            return tenant["id"]
+        if tenant["project"]["name"] == friendlyname:
+            return tenant["project"]["id"]

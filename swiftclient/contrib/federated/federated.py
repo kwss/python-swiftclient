@@ -27,7 +27,7 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None):
     tenantData = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
     if tenant is None:
-        tenant = futils.selectTenant(tenantData['tenants'])['id']
+        tenant = futils.selectTenant(tenantData['tenants'])['project']['id']
     scopedToken = swapTokens(keystoneEndpoint, tenantData['unscopedToken'], tenant)
     return scopedToken
 

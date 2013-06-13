@@ -59,7 +59,7 @@ from swiftclient.contrib.federated import federated_exceptions, federated_utils
 
 LOG = logging.getLogger('swiftclient')
 LOG.addHandler(logging.StreamHandler())
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.INFO)
 
 class MoonshotException(Exception):
     pass
