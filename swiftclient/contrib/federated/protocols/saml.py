@@ -7,7 +7,7 @@ import ssl
 ## Sends the authentication request to the IdP along
 # @param idpEndpoint The IdP address
 # @param idpRequest The authentication request returned by Keystone
-def getIdPResponse(idpEndpoint, idpRequest, realm=None):
+def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm=None):
     global response
     response = None
     config = open(os.path.join(os.path.dirname(__file__),"config/federated.cfg"), "Ur")

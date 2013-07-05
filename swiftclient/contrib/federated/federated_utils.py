@@ -9,12 +9,13 @@ import urllib3
 
 ## Send a request that will be process by the Federation Middleware
 # It add the X-Auth-Type: federated header in the HTTP request
-def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None):
-    #print 'Request: %r' % json.dumps(data)
-    headers = {'X-Authentication-Type': 'federated'}
+def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None, withheader = True):
+    if withheader:
+        headers = {'X-Authentication-Type': 'federated'}
+    else:
+	headers = {}
     if pool is None:
         pool = urllib3.PoolManager()
-
     if method == "GET":
         data = urllib.urlencode(data)
         response = pool.request('GET', keystoneEndpoint, fields = data, headers = headers)
@@ -27,13 +28,19 @@ def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None):
     return response
 
 ## Displays the list of tenants to the user so he can choose one
-def selectTenant(tenantsList, serverName=None):
+def selectTenantOrDomain(tenantsList, serverName=None):
     if not serverName:
-        print "You have access to the following tenant(s):"
+        print "You have access to the following tenant(s)and domain(s):"
     else:
-        print "You have access to the following tenant(s) on "+serverName+":"
+        print "You have access to the following tenant(s) and domain(s)on "+serverName+":"
     for idx, tenant in enumerate(tenantsList):
-        print "\t{", idx, "} ", tenant["project"]["description"]
+        if tenant.get("project", None) is None and tenant.get("domain", None) is None:
+            print "\t{", idx, "} ", tenant["description"]
+        else:
+            if tenant.get("domain", None) is not None:
+                print "\t{", idx, "} ", tenant["domain"]["description"]
+            else:
+                print "\t{", idx, "} ", tenant["project"]["description"]+" @ "+tenant["project"]["domain"]["name"]
     chosen = False
     choice = None
     while not chosen:
@@ -68,5 +75,6 @@ def selectRealm(realmList):
 ## Given a tenants list and a friendly name, returns the corresponding tenantId
 def getTenantId(tenantsList, friendlyname):
     for idx, tenant in enumerate(tenantsList):
-        if tenant["project"]["name"] == friendlyname:
-            return tenant["project"]["id"]
+        if tenant.get("project", None) is not None:
+            if tenant["project"]["name"] == friendlyname:
+                return "tenantId", tenant["id"]

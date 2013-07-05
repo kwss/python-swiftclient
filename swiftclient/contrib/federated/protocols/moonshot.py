@@ -76,6 +76,7 @@ class MoonshotNegotiation(object):
         self.idpResponse = {'idpNegotiation': ''}
 
     def negotiation(self):
+        LOG.debug('Call init: %r / %r' % (self.serviceName, self.mechanism))
         result, self.context = moonshot.authGSSClientInit(self.serviceName,
                                                           moonshot.GSS_C_MUTUAL_FLAG | moonshot.GSS_C_SEQUENCE_FLAG,
                                                           self.mechanism)
@@ -89,6 +90,7 @@ class MoonshotNegotiation(object):
     def negotiationStep(self):
         LOG.debug('response: %r' % self.idpResponse)
         result = moonshot.authGSSClientStep(self.context, self.idpResponse['idpNegotiation'])
+        LOG.debug('ClientStep: %r' % result)
 
         # Build request using GSS challenge
         idpNegotiation = moonshot.authGSSClientResponse(self.context);
