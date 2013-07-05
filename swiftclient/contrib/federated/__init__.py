@@ -1,1 +1,1 @@
-from moonshot import *
+from pymoonshot import *

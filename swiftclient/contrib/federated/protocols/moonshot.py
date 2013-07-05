@@ -54,7 +54,7 @@ import copy
 import json
 import urllib3
 import logging
-import moonshot
+import pymoonshot as moonshot
 from swiftclient.contrib.federated import federated_exceptions, federated_utils
 
 LOG = logging.getLogger('swiftclient')
