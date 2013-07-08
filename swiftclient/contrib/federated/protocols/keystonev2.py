@@ -11,7 +11,7 @@ import ssl
 ## Sends the authentication request to the IdP along
 # @param idpEndpoint The IdP address
 # @param idpRequest The authentication request returned by Keystone
-def getIdPResponse(idpEndpoint, idpRequest, realm=None):
+def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm=None):
     print "\nInitiating Authentication against: "+realm["name"]+"\n"
     # Get the unscoped token
     # 1. Get the user name

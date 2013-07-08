@@ -5,6 +5,7 @@ import BaseHTTPServer
 import ssl
 import urlparse
 import urllib2
+import urllib3
 import webbrowser
 import federated_exceptions as fe
 import federated_utils as futils
@@ -21,8 +22,9 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
     # Load the correct protocol module according to the IdP type
     protocol = realm['type'].split('.')[1]
     processing_module = load_protocol_module(protocol)
-    response = processing_module.getIdPResponse(request['idpEndpoint'], request['idpRequest'], realm)
-    tenantData = getUnscopedToken(keystoneEndpoint, response, realm)
+    requestPool = urllib3.PoolManager()
+    response = processing_module.getIdPResponse(keystoneEndpoint, request['idpEndpoint'], request['idpRequest'], requestPool, realm)
+    tenantData = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
     if tenant is None:
         tenant = futils.selectTenantOrDomain(tenantData['tenants'])
@@ -49,7 +51,7 @@ def load_protocol_module(protocol):
 def getRealmList(keystoneEndpoint):
     data = {}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
-    info = json.loads(resp.read())
+    info = json.loads(resp.data)
     return info
 
 ## Get the authentication request to send to the IdP
@@ -58,7 +60,7 @@ def getRealmList(keystoneEndpoint):
 def getIdPRequest(keystoneEndpoint, realm):
     data = {'realm': realm}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
-    info = json.loads(resp.read())
+    info = json.loads(resp.data)
     return info
 
 # This variable is necessary to get the IdP response
@@ -133,13 +135,13 @@ def getIdPResponse(idpEndpoint, idpRequest):
 ## Get an unscoped token for the user along with the tenants list
 # @param keystoneEndpoint The keystone url
 # @param idpResponse The assertion retreived from the IdP
-def getUnscopedToken(keystoneEndpoint, idpResponse, realm = None):
+def getUnscopedToken(keystoneEndpoint, idpResponse, requestPool, realm = None):
     if realm is None:
 	data = {'idpResponse' : idpResponse}
     else:
     	data = {'idpResponse' : idpResponse, 'realm' : realm}
-    resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
-    info = json.loads(resp.read())
+    resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST', requestPool)
+    info = json.loads(resp.data)
     return info
 
 ## Get a tenant-scoped token for the user
@@ -168,4 +170,4 @@ def swapTokens(keystoneEndpoint, unscopedToken, type, tenantId):
        else:
            data["auth"]["identity"]["scope"]["project"] = {"id": tenantId}
     resp = futils.middlewareRequest(keystoneEndpoint + "tokens", data,'POST', withheader = False)
-    return json.loads(resp.read())
+    return json.loads(resp.data)
