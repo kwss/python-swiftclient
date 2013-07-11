@@ -1,4 +1,5 @@
 import imp
+import sys
 import os
 import json
 import BaseHTTPServer
@@ -20,7 +21,12 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
     request = getIdPRequest(keystoneEndpoint, realm)
     # Load the correct protocol module according to the IdP type
     protocol = realm['type'].split('.')[1]
-    processing_module = load_protocol_module(protocol)
+    try:
+        processing_module = load_protocol_module(protocol)
+    except IOError as e:
+        print "The selected Identity Service is not supported by your client, please restart the process and choose an alternative provider"
+        sys.exit(1)
+	
     response = processing_module.getIdPResponse(request['idpEndpoint'], request['idpRequest'], realm)
     tenantData = getUnscopedToken(keystoneEndpoint, response, realm)
     tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
