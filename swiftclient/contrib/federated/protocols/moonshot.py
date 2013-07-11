@@ -54,7 +54,7 @@ import copy
 import json
 import urllib3
 import logging
-import platform as _platform
+import platform
 import pymoonshot as moonshot
 from swiftclient.contrib.federated import federated_exceptions, federated_utils
 
@@ -113,7 +113,7 @@ class MoonshotNegotiation(object):
 # @param idpEndpoint {u'serviceName': u'keystone@moonshot', u'mechanism': u'{1 3 6 1 5 5 15 1 1 18}'}
 # @param idpRequest The authentication request returned by Keystone
 def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm=None):
-    if not _platform == 'linux' and not _platform == 'linux2':
+    if not platform.system() == 'Linux':
         raise MoonshotException("The Moonshot protocol is not supported under Windows or Mac OS X")
     m = MoonshotNegotiation(keystoneEndpoint, idpEndpoint['serviceName'], idpEndpoint['mechanism'], requestPool, realm)
     m.negotiation()
