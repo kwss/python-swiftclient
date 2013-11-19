@@ -9,11 +9,13 @@ import urllib3
 
 ## Send a request that will be process by the Federation Middleware
 # It add the X-Auth-Type: federated header in the HTTP request
-def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None, withheader = True):
+def middlewareRequest(keystoneEndpoint, data = {}, method = "GET", pool = None, withheader = True, altheader=None):
     if withheader:
         headers = {'X-Authentication-Type': 'federated'}
-    else:
+    elif altheader is None:
 	headers = {}
+    else:
+        headers = altheader
     if pool is None:
         pool = urllib3.PoolManager()
     if method == "GET":
@@ -35,12 +37,12 @@ def selectTenantOrDomain(tenantsList, serverName=None):
         print "You have access to the following tenant(s) and domain(s)on "+serverName+":"
     for idx, tenant in enumerate(tenantsList):
         if tenant.get("project", None) is None and tenant.get("domain", None) is None:
-            print "\t{", idx, "} ", tenant["description"]
+            print "\t{", idx, "} ", tenant["name"]
         else:
             if tenant.get("domain", None) is not None:
-                print "\t{", idx, "} ", tenant["domain"]["description"]
+                print "\t{", idx, "} ", tenant["domain"]["name"]
             else:
-                print "\t{", idx, "} ", tenant["project"]["description"]+" @ "+tenant["project"]["domain"]["name"]
+                print "\t{", idx, "} ", tenant["project"]["name"]+" @ "+tenant["project"]["domain"]["name"]
     chosen = False
     choice = None
     while not chosen:

@@ -30,7 +30,7 @@ def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm
     if cert == "default":
         cert = os.path.join(os.path.dirname(__file__),"certs/server.crt")
     print "Initiating Authentication against: "+realm["name"]+"\n"
-    webbrowser.open(idpEndpoint + idpRequest)
+    webbrowser.open(idpEndpoint+ "?" + idpRequest)
     class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         def log_request(code=0, size=0):

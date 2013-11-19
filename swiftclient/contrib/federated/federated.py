@@ -15,30 +15,33 @@ import federated_utils as futils
 # @param realm The IdP the user will be using
 # @param tenantFn The tenant friendly name the user wants to use
 def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 = False):
+    keystoneEndpoint+="/auth/tokens"
     realms = getRealmList(keystoneEndpoint)
-    if realm is None or {'name': realm} not in realms['realms']:
-        realm = futils.selectRealm(realms['realms'])
+    if realm is None or {'name': realm} not in realms['providers']:
+        realm = futils.selectRealm(realms['error']['identity']['federated']['providers'])
     request = getIdPRequest(keystoneEndpoint, realm)
     # Load the correct protocol module according to the IdP type
     protocol = realm['type'].split('.')[1]
     processing_module = load_protocol_module(protocol)
     requestPool = urllib3.PoolManager()
-    response = processing_module.getIdPResponse(keystoneEndpoint, request['idpEndpoint'], request['idpRequest'], requestPool, realm)
-    tenantData = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
-    tenant = futils.getTenantId(tenantData['tenants'], tenantFn)
+    response = processing_module.getIdPResponse(keystoneEndpoint, request['error']['identity']['federated']['endpoint'], request['error']['identity']['federated']['data'], requestPool, realm)
+    tenantData, token_id = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
+    #tenant = futils.getTenantId(tenantData['token']['extras']['projects'], tenantFn)
+    tenant = None
     if tenant is None:
-        tenant = futils.selectTenantOrDomain(tenantData['tenants'])
+        tenant = futils.selectTenantOrDomain(tenantData['token']['extras']['projects'])
         if tenant.get("project", None) is None and tenant.get("domain", None) is None:
             tenant = tenant["id"]
-            type = "tenantId"
+            type = "project"
         else:
             if tenant.get("domain", None) is None:
                 tenant = tenant["project"]["id"]
-                type = "tenantId"
+                type = "project"
             else:
                 tenant = tenant["domain"]["id"]
-                type = "domainId"
-    scopedToken = swapTokens(keystoneEndpoint, tenantData['unscopedToken'], type, tenant)
+                type = "domain"
+    scopedToken = swapTokens(keystoneEndpoint, token_id, type, tenant)
+    scopedToken["token"]['id'] = token_id
     return scopedToken
 
 def load_protocol_module(protocol):
@@ -49,7 +52,8 @@ def load_protocol_module(protocol):
 ## Get the list of all the IdP available
 # @param keystoneEndpoint The keystone url
 def getRealmList(keystoneEndpoint):
-    data = {}
+    data = {"auth": {
+        "identity":{"methods":["federated"], "federated":{"phase":"discovery"}}}}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
     info = json.loads(resp.data)
     return info
@@ -58,7 +62,8 @@ def getRealmList(keystoneEndpoint):
 # @param keystoneEndpoint The keystone url
 # @param realm The name of the IdP
 def getIdPRequest(keystoneEndpoint, realm):
-    data = {'realm': realm}
+    data =  {"auth": {
+        "identity":{"methods":["federated"], "federated":{"phase":"request", "provider_id":realm['id']}}}}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST')
     info = json.loads(resp.data)
     return info
@@ -137,12 +142,12 @@ def getIdPResponse(idpEndpoint, idpRequest):
 # @param idpResponse The assertion retreived from the IdP
 def getUnscopedToken(keystoneEndpoint, idpResponse, requestPool, realm = None):
     if realm is None:
-	data = {'idpResponse' : idpResponse}
+	data = {"auth": {"identity":{"methods":["federated"], "federated":{"phase":"validate", "data":idpResponse}}}}
     else:
-    	data = {'idpResponse' : idpResponse, 'realm' : realm}
+    	data = {"auth": {"identity":{"methods":["federated"], "federated":{"phase":"validate", "provider_id":realm['id'], "data":idpResponse}}}}
     resp = futils.middlewareRequest(keystoneEndpoint, data, 'POST', requestPool)
     info = json.loads(resp.data)
-    return info
+    return info, resp.getheader("x-subject-token")
 
 ## Get a tenant-scoped token for the user
 # @param keystoneEndpoint The keystone url
@@ -163,11 +168,11 @@ def getScopedToken(keystoneEndpoint, idpResponse, tenantFn):
 def swapTokens(keystoneEndpoint, unscopedToken, type, tenantId):
     data = {'auth' : {'token' : {'id' : unscopedToken}, type : tenantId}}
     if "v3" in keystoneEndpoint:
-       keystoneEndpoint+="auth/"
-       data = {"auth": {"identity": {"methods": ["token"],"token": {"id": unscopedToken}, "scope":{}}}}
-       if type == 'domainId':
-           data["auth"]["identity"]["scope"]["domain"] = {"id": tenantId}
+       data = {"auth": {"identity": {"methods": ["token"],"token": {"id": unscopedToken}}, "scope":{}}}
+       if type == 'domain':
+           data["auth"]["scope"]["domain"] = {"id": tenantId}
        else:
-           data["auth"]["identity"]["scope"]["project"] = {"id": tenantId}
-    resp = futils.middlewareRequest(keystoneEndpoint + "tokens", data,'POST', withheader = False)
+           data["auth"]["scope"]["project"] = {"id": tenantId}
+    header = {"X-AUTH-TOKEN":unscopedToken}
+    resp = futils.middlewareRequest(keystoneEndpoint, data,'POST', withheader = False, altheader=header)
     return json.loads(resp.data)
