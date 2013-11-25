@@ -17,7 +17,6 @@ import federated_utils as futils
 def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 = False):
     keystoneEndpoint+="/auth/tokens"
     realms = getRealmList(keystoneEndpoint)
-    print realms
     if realm is None or {'name': realm} not in realms['providers']:
         realm = futils.selectRealm(realms['error']['identity']['federated']['providers'])
     request = getIdPRequest(keystoneEndpoint, realm)
@@ -27,6 +26,7 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
     processing_module = load_protocol_module(protocol)
     requestPool = urllib3.PoolManager()
     response = processing_module.getIdPResponse(keystoneEndpoint, request['error']['identity']['federated'], request['error']['identity']['federated'], requestPool, realm)
+
     tenantData, token_id = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
     #tenant = futils.getTenantId(tenantData['token']['extras']['projects'], tenantFn)
     tenant = None
