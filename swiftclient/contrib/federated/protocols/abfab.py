@@ -100,15 +100,17 @@ class MoonshotNegotiation(object):
         
         # Send request only if the challenge is not empty (end of negotiation)
         if idpNegotiation is not None:
-            self.idpResponse = {"negotiation": self.negotiationRequest(idpNegotiation)["error"]["identity"]["federated"]["negotiation"]}
+            server_resp = self.negotiationRequest(idpNegotiation, self.idpResponse.get("cid", None));
+	    
+            self.idpResponse = {"negotiation": server_resp["error"]["identity"]["federated"]["negotiation"], "cid": server_resp["error"]["identity"]["federated"].get("cid", None)}
             print self.idpResponse
             LOG.debug("response: %r", json.dumps(self.idpResponse))
         LOG.debug("authGSSClientStep: %d", result)
         return result
 
-    def negotiationRequest(self, body):
+    def negotiationRequest(self, body, cid = None):
         headers = {'Content-Type':'application/json'}
-        body = json.dumps({'auth':{'identity':{'methods':['federated'], 'federated':{'phase': 'negotiate', 'protocol': 'abfab','negotiation': body, 'provider_id':self.realm}}}})
+        body = json.dumps({'auth':{'identity':{'methods':['federated'], 'federated':{'phase': 'negotiate', 'protocol': 'abfab','negotiation': body, 'provider_id':self.realm, "cid": cid}}}})
         LOG.debug("request: %s", body)
         return json.loads(self.requestPool.urlopen('POST', self.keystoneEndpoint, body = body, headers = headers).data)
 
