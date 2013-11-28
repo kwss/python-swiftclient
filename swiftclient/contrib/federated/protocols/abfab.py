@@ -87,6 +87,7 @@ class MoonshotNegotiation(object):
         while negotiation != moonshot.AUTH_GSS_COMPLETE:
             negotiation = self.negotiationStep()
         LOG.info("\nAuthentication successful using \"%s\" moonshot identity.\n", moonshot.authGSSClientUserName(self.context))
+        return self.idpResponse.get("cid", None)
 
     def negotiationStep(self):
         print "step " + str(self.step)
@@ -122,4 +123,4 @@ def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm
         raise MoonshotException("The Moonshot protocol is not supported under Windows or Mac OS X")
     m = MoonshotNegotiation(keystoneEndpoint, idpEndpoint['service_name'], idpEndpoint['mechanism'], requestPool, realm)
     m.negotiation()
-    return None
+    return {"cid":m.negotiation()]
