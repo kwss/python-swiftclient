@@ -123,4 +123,4 @@ def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm
         raise MoonshotException("The Moonshot protocol is not supported under Windows or Mac OS X")
     m = MoonshotNegotiation(keystoneEndpoint, idpEndpoint['service_name'], idpEndpoint['mechanism'], requestPool, realm)
     m.negotiation()
-    return {"cid":m.negotiation()]
+    return {"cid":m.negotiation()}
