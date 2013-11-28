@@ -71,7 +71,7 @@ class MoonshotNegotiation(object):
         self.context = None
         self.serviceName = serviceName
         self.mechanism = mechanism
-        
+        self.step = 0
         self.requestPool = requestPool
         self.keystoneEndpoint = keystoneEndpoint
         self.idpResponse = {'idpNegotiation': ''}
@@ -89,23 +89,26 @@ class MoonshotNegotiation(object):
         LOG.info("\nAuthentication successful using \"%s\" moonshot identity.\n", moonshot.authGSSClientUserName(self.context))
 
     def negotiationStep(self):
+        print "step " + str(self.step)
+        self.step = self.step+1
         LOG.debug('response: %r' % self.idpResponse)
         result = moonshot.authGSSClientStep(self.context, self.idpResponse['idpNegotiation'])
         LOG.debug('ClientStep: %r' % result)
 
         # Build request using GSS challenge
         idpNegotiation = moonshot.authGSSClientResponse(self.context);
-
+        
         # Send request only if the challenge is not empty (end of negotiation)
         if idpNegotiation is not None:
             self.idpResponse = self.negotiationRequest(idpNegotiation)
+            print self.idpResponse
             LOG.debug("response: %r", json.dumps(self.idpResponse))
         LOG.debug("authGSSClientStep: %d", result)
         return result
 
     def negotiationRequest(self, body):
-        headers = {'X-Authentication-Type': 'federated'}
-        body = json.dumps({'realm': self.realm, 'idpNegotiation': body})
+        headers = {'Content-Type':'application/json'}
+        body = json.dumps({'auth':{'identity':{'methods':['federated'], 'federated':{'phase': 'negotiate', 'protocol': 'abfab','negotiation': body, 'provider_id':self.realm}}}})
         LOG.debug("request: %s", body)
         return json.loads(self.requestPool.urlopen('POST', self.keystoneEndpoint, body = body, headers = headers).data)
 
@@ -115,6 +118,6 @@ class MoonshotNegotiation(object):
 def getIdPResponse(keystoneEndpoint, idpEndpoint, idpRequest, requestPool, realm=None):
     if not platform.system() == 'Linux':
         raise MoonshotException("The Moonshot protocol is not supported under Windows or Mac OS X")
-    m = MoonshotNegotiation(keystoneEndpoint, idpEndpoint['serviceName'], idpEndpoint['mechanism'], requestPool, realm)
+    m = MoonshotNegotiation(keystoneEndpoint, idpEndpoint['service_name'], idpEndpoint['mechanism'], requestPool, realm)
     m.negotiation()
     return None
