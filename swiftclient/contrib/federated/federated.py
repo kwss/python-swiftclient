@@ -20,7 +20,6 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
     if realm is None or {'name': realm} not in realms['providers']:
         realm = futils.selectRealm(realms['error']['identity']['federated']['providers'])
     request = getIdPRequest(keystoneEndpoint, realm)
-    print request
     # Load the correct protocol module according to the IdP type
     protocol = realm['type'].split('.')[1]
     processing_module = load_protocol_module(protocol)
@@ -42,7 +41,7 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
             else:
                 tenant = tenant["domain"]["id"]
                 type = "domain"
-    scopedToken = swapTokens(keystoneEndpoint, token_id, type, tenant)
+    scopedToken, token_id = swapTokens(keystoneEndpoint, token_id, type, tenant)
     scopedToken["token"]['id'] = token_id
     return scopedToken
 
@@ -177,4 +176,4 @@ def swapTokens(keystoneEndpoint, unscopedToken, type, tenantId):
            data["auth"]["scope"]["project"] = {"id": tenantId}
     header = {"X-AUTH-TOKEN":unscopedToken}
     resp = futils.middlewareRequest(keystoneEndpoint, data,'POST', withheader = False, altheader=header)
-    return json.loads(resp.data)
+    return json.loads(resp.data), resp.getheader("x-subject-token")
