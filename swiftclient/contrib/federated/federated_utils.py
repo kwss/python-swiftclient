@@ -76,7 +76,8 @@ def selectRealm(realmList):
 
 ## Given a tenants list and a friendly name, returns the corresponding tenantId
 def getTenantId(tenantsList, friendlyname):
-    for idx, tenant in enumerate(tenantsList):
-        if tenant.get("project", None) is not None:
-            if tenant["project"]["name"] == friendlyname:
-                return "tenantId", tenant["id"]
+    for tenant in tenantsList:
+        if tenant["name"] == friendlyname:
+            return tenant["id"]
+	if tenant["id"] == friendlyname:
+            return friendlyname

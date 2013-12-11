@@ -27,8 +27,8 @@ def federatedAuthentication(keystoneEndpoint, realm = None, tenantFn = None, v3 
     response = processing_module.getIdPResponse(keystoneEndpoint, request['error']['identity']['federated'], request['error']['identity']['federated'], requestPool, realm)
 
     tenantData, token_id = getUnscopedToken(keystoneEndpoint, response, requestPool, realm)
-    #tenant = futils.getTenantId(tenantData['token']['extras']['projects'], tenantFn)
-    tenant = None
+    tenant = futils.getTenantId(tenantData['token']['extras']['projects'], tenantFn)
+    type = "project"
     if tenant is None:
         tenant = futils.selectTenantOrDomain(tenantData['token']['extras']['projects'])
         if tenant.get("project", None) is None and tenant.get("domain", None) is None:
