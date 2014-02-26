@@ -52,6 +52,7 @@ Created on 8 March 2013
 
 import copy
 import json
+import sys
 import urllib3
 import logging
 import platform
@@ -90,7 +91,14 @@ class MoonshotNegotiation(object):
 
     def negotiationStep(self):
         LOG.debug('response: %r' % self.idpResponse)
-        result = moonshot.authGSSClientStep(self.context, self.idpResponse['idpNegotiation'])
+        try:
+            result = moonshot.authGSSClientStep(self.context, self.idpResponse['idpNegotiation'])
+        except moonshot.GSSError as e:
+            if e.message in "Missing":
+                print "Your credentials are missing, please check in your Moonshot Identity Manager that you have not associated 'No Identity' with this service"
+                sys.exit(1)
+            else:
+                raise e
         LOG.debug('ClientStep: %r' % result)
 
         # Build request using GSS challenge
