@@ -90,7 +90,6 @@ class MoonshotNegotiation(object):
         return self.idpResponse.get("cid", None)
 
     def negotiationStep(self):
-        print "step " + str(self.step)
         self.step = self.step+1
         LOG.debug('response: %r' % self.idpResponse)
         result = moonshot.authGSSClientStep(self.context, self.idpResponse['negotiation'])
@@ -104,7 +103,6 @@ class MoonshotNegotiation(object):
             server_resp = self.negotiationRequest(idpNegotiation, self.idpResponse.get("cid", None));
 	    
             self.idpResponse = {"negotiation": server_resp["error"]["identity"]["federated"]["negotiation"], "cid": server_resp["error"]["identity"]["federated"].get("cid", None)}
-            print self.idpResponse
             LOG.debug("response: %r", json.dumps(self.idpResponse))
         LOG.debug("authGSSClientStep: %d", result)
         return result
